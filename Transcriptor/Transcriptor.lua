@@ -1683,6 +1683,8 @@ do
 				else
 					return instanceName, instanceType, difficulty, "5 Heroic"
 				end
+			elseif difficulty == 3 then
+				return "mythic", difficultyName.." - ", 3, maxPlayers
 			end
 		else
 			return instanceName, instanceType, difficulty, NONE
