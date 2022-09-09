@@ -20,8 +20,10 @@ local logging = nil
 local compareSuccess = nil
 local compareUnitSuccess = nil
 local compareEmotes = nil
+local compareYells = nil
 local compareStart = nil
 local compareUnitStart = nil
+local compareSummon = nil
 local compareAuraApplied = nil
 local compareStartTime = nil
 --local collectNameplates = nil
@@ -74,11 +76,15 @@ do
 	end
 end
 
-local function MobId(guid)
+local function MobId(guid, extra)
 	if not guid then return 1 end
 	local strId = tonumber(guid:sub(9, 12), 16) or 1
-	local uniq = tonumber(guid:sub(13), 16) or 1
-	return strId.."-"..uniq
+	if extra then
+		local uniq = tonumber(guid:sub(13), 16) or 1
+		return strId.."-"..uniq
+	else
+		return strId
+	end
 end
 
 local function InsertSpecialEvent(name)
@@ -97,6 +103,13 @@ local function InsertSpecialEvent(name)
 	end
 	if compareStart then
 		for id,tbl in next, compareStart do
+			for npcId, list in next, tbl do
+				list[#list+1] = {t, name}
+			end
+		end
+	end
+	if compareSummon then
+		for id,tbl in next, compareSummon do
 			for npcId, list in next, tbl do
 				list[#list+1] = {t, name}
 			end
@@ -125,6 +138,13 @@ local function InsertSpecialEvent(name)
 	end
 	if compareEmotes then
 		for id,tbl in next, compareEmotes do
+			for npcName, list in next, tbl do
+				list[#list+1] = {t, name}
+			end
+		end
+	end
+	if compareYells then
+		for id,tbl in next, compareYells do
 			for npcName, list in next, tbl do
 				list[#list+1] = {t, name}
 			end
@@ -748,7 +768,20 @@ do
 				end
 				compareStart[spellId][npcId][#compareStart[spellId][npcId]+1] = debugprofilestop()
 			end
-			if event == "SPELL_AURA_APPLIED" and (not sourceName or (band(sourceFlags, mineOrPartyOrRaid) == 0 and not find(sourceGUID, "Player", nil, true))) then
+			if event == "SPELL_SUMMON" and (not sourceName or (band(sourceFlags, mineOrPartyOrRaid) == 0 and not find(sourceGUID, "Player", nil, true))) then
+				if not compareSummon then compareSummon = {} end
+				if not compareSummon[spellId] then compareSummon[spellId] = {} end
+				local npcId = MobId(sourceGUID, true)
+				if not compareSummon[spellId][npcId] then
+					if previousSpecialEvent then
+						compareSummon[spellId][npcId] = {{compareStartTime, previousSpecialEvent[1], previousSpecialEvent[2]}}
+					else
+						compareSummon[spellId][npcId] = {compareStartTime}
+					end
+				end
+				compareSummon[spellId][npcId][#compareSummon[spellId][npcId]+1] = debugprofilestop()
+			end
+			if (event == "SPELL_AURA_APPLIED" or event == "SPELL_AURA_APPLIED_DOSE") and (not sourceName or (band(sourceFlags, mineOrPartyOrRaid) == 0 and not find(sourceGUID, "Player", nil, true))) then
 				if not compareAuraApplied then compareAuraApplied = {} end
 				if not compareAuraApplied[spellId] then compareAuraApplied[spellId] = {} end
 				local npcId = MobId(sourceGUID, true)
@@ -1039,7 +1072,7 @@ do
 
 	function sh.UNIT_TARGET(unit)
 		if safeUnit(unit) then
-			return format("%s#%s#Target: %s#TargetOfTarget: %s", unit, tostring(UnitName(unit)), tostring(UnitName(unit.."target")), tostring(UnitName(unit.."targettarget")))
+			return format("-%s:%s- [CanAttack:%s#Exists:%s#IsVisible:%s#ID:%s#GUID:%s#Classification:%s#Health:%s] - Target: %s#TargetOfTarget: %s", tostringall(unit, UnitName(unit), UnitCanAttack("player", unit), UnitExists(unit), UnitIsVisible(unit), MobId(UnitGUID(unit)), UnitGUID(unit), UnitClassification(unit), UnitHealth(unit), UnitName(unit.."target"), UnitName(unit.."targettarget")))
 		end
 	end
 end
@@ -1060,11 +1093,11 @@ end
 
 function sh.INSTANCE_ENCOUNTER_ENGAGE_UNIT(...)
 	return strjoin("#", tostringall("Fake Args:",
-		"boss1", UnitCanAttack("player", "boss1"), UnitExists("boss1"), UnitIsVisible("boss1"), UnitName("boss1"), UnitGUID("boss1"), UnitClassification("boss1"), UnitHealth("boss1"),
-		"boss2", UnitCanAttack("player", "boss2"), UnitExists("boss2"), UnitIsVisible("boss2"), UnitName("boss2"), UnitGUID("boss2"), UnitClassification("boss2"), UnitHealth("boss2"),
-		"boss3", UnitCanAttack("player", "boss3"), UnitExists("boss3"), UnitIsVisible("boss3"), UnitName("boss3"), UnitGUID("boss3"), UnitClassification("boss3"), UnitHealth("boss3"),
-		"boss4", UnitCanAttack("player", "boss4"), UnitExists("boss4"), UnitIsVisible("boss4"), UnitName("boss4"), UnitGUID("boss4"), UnitClassification("boss4"), UnitHealth("boss4"),
-		"boss5", UnitCanAttack("player", "boss5"), UnitExists("boss5"), UnitIsVisible("boss5"), UnitName("boss5"), UnitGUID("boss5"), UnitClassification("boss5"), UnitHealth("boss5"),
+		"boss1", UnitCanAttack("player", "boss1"), UnitExists("boss1"), UnitIsVisible("boss1"), UnitName("boss1"), MobId(UnitGUID("boss1")), UnitGUID("boss1"), UnitClassification("boss1"), UnitHealth("boss1"),
+		"boss2", UnitCanAttack("player", "boss2"), UnitExists("boss2"), UnitIsVisible("boss2"), UnitName("boss2"), MobId(UnitGUID("boss2")), UnitGUID("boss2"), UnitClassification("boss2"), UnitHealth("boss2"),
+		"boss3", UnitCanAttack("player", "boss3"), UnitExists("boss3"), UnitIsVisible("boss3"), UnitName("boss3"), MobId(UnitGUID("boss3")), UnitGUID("boss3"), UnitClassification("boss3"), UnitHealth("boss3"),
+		"boss4", UnitCanAttack("player", "boss4"), UnitExists("boss4"), UnitIsVisible("boss4"), UnitName("boss4"), MobId(UnitGUID("boss4")), UnitGUID("boss4"), UnitClassification("boss4"), UnitHealth("boss4"),
+		"boss5", UnitCanAttack("player", "boss5"), UnitExists("boss5"), UnitIsVisible("boss5"), UnitName("boss5"), MobId(UnitGUID("boss5")), UnitGUID("boss5"), UnitClassification("boss5"), UnitHealth("boss5"),
 		"Real Args:", ...)
 	)
 end
@@ -1208,6 +1241,26 @@ function sh.CHAT_MSG_RAID_BOSS_EMOTE(msg, npcName, ...)
 	return strjoin("#", msg, npcName, tostringall(...))
 end
 
+function sh.CHAT_MSG_MONSTER_YELL(msg, npcName, ...)
+	local id = msg:match("|Hspell:([^|]+)|h")
+	if msg then
+		local spellId = id and tonumber(id) or msg -- aggregate emotes by its spellId (only seen it in one WotLK private server, so also aggregate by msg)
+		if spellId then
+			if not compareYells then compareYells = {} end
+			if not compareYells[spellId] then compareYells[spellId] = {} end
+			if not compareYells[spellId][npcName] then
+				if previousSpecialEvent then
+					compareYells[spellId][npcName] = {{compareStartTime, previousSpecialEvent[1], previousSpecialEvent[2]}}
+				else
+					compareYells[spellId][npcName] = {compareStartTime}
+				end
+			end
+			compareYells[spellId][npcName][#compareYells[spellId][npcName]+1] = debugprofilestop()
+		end
+	end
+	return strjoin("#", msg, npcName, tostringall(...))
+end
+
 do
 	local UnitAura = UnitAura
 	function sh.UNIT_AURA(unit)
@@ -1340,7 +1393,7 @@ local eventCategories = {
 	UNIT_SPELLCAST_INTERRUPTED = "UNIT_SPELLCAST",
 	UNIT_SPELLCAST_CHANNEL_START = "UNIT_SPELLCAST",
 	UNIT_SPELLCAST_CHANNEL_STOP = "UNIT_SPELLCAST",
-	UNIT_TARGET = "UNIT_SPELLCAST",
+	UNIT_TARGET = "COMBAT",
 	UNIT_ENERGY = "UNIT_POWER_UPDATE",
 	UNIT_FOCUS = "UNIT_POWER_UPDATE",
 	UNIT_HAPPINESS = "UNIT_POWER_UPDATE",
@@ -1739,9 +1792,12 @@ do
 		end
 	end
 
+	local transcriptorVersion = GetAddOnMetadata("Transcriptor", "Version")
+	local dbmRevision = DBM and format("%s (%s)", DBM.DisplayVersion, (DBM.ShowRealDate and DBM:ShowRealDate(DBM.Revision) or DBM.Revision)) or "No DBM"
 	local wowVersion, buildRevision = GetBuildInfo() -- Note that both returns here are strings, not numbers.
 	local realmName = GetRealmName()
-	local logNameFormat = "[%s]@[%s] - Zone:%d = %s/%s, Difficulty:%d (%s), Type:%s, " .. format("Version: %s.%s - Server: %s", wowVersion, buildRevision, realmName)
+	local playerName = UnitName("player")
+	local logNameFormat = "[%s]@[%s] - Zone:%d = %s/%s, Difficulty:%d (%s), Type:%s, " .. format("Transcriptor: %s, DBM: %s, Version: %s.%s - Player: %s | Server: %s", transcriptorVersion, dbmRevision, wowVersion, buildRevision, playerName, realmName)
 	function Transcriptor:StartLog(silent)
 		if logging then
 			print(L["You are already logging an encounter."])
@@ -1873,7 +1929,7 @@ function Transcriptor:StopLog(silent)
 			print(L["Logs will probably be saved to WoW\\WTF\\Account\\<name>\\SavedVariables\\Transcriptor.lua once you relog or reload the user interface."])
 		end
 
-		if compareSuccess or compareStart or compareAuraApplied or compareUnitSuccess or compareUnitStart or compareEmotes then
+		if compareSuccess or compareStart or compareSummon or compareAuraApplied or compareUnitSuccess or compareUnitStart or compareEmotes or compareYells then
 			currentLog.TIMERS = {}
 			if compareSuccess then
 				currentLog.TIMERS.SPELL_CAST_SUCCESS = {}
@@ -2014,6 +2070,76 @@ function Transcriptor:StopLog(silent)
 					end
 				end
 				table.sort(currentLog.TIMERS.SPELL_CAST_START)
+			end
+			if compareSummon then
+				currentLog.TIMERS.SPELL_SUMMON = {}
+				for id,tbl in next, compareSummon do
+					for npcId, list in next, tbl do
+						local n = format("%s-%d-npc:%s", GetSpellInfo(id), id, npcId)
+						local str
+						for i = 2, #list do
+							if not str then
+								if type(list[1]) == "table" then
+									local sincePull = list[i] - list[1][1]
+									local sincePreviousEvent = list[i] - list[1][2]
+									local previousEventName = list[1][3]
+									str = format("%s = pull:%.1f/%s/%.1f", n, sincePull/1000, previousEventName, sincePreviousEvent/1000)
+								else
+									local sincePull = list[i] - list[1]
+									str = format("%s = pull:%.1f", n, sincePull/1000)
+								end
+							else
+								if type(list[i]) == "table" then
+									if type(list[i-1]) == "number" then
+										local t = list[i][1]-list[i-1]
+										str = format("%s, %s/%.1f", str, list[i][2], t/1000)
+									elseif type(list[i-1]) == "table" then
+										local t = list[i][1]-list[i-1][1]
+										str = format("%s, %s/%.1f", str, list[i][2], t/1000)
+									else
+										str = format("%s, %s", str, list[i][2])
+									end
+								else
+									if type(list[i-1]) == "table" then
+										if type(list[i-2]) == "table" then
+											if type(list[i-3]) == "table" then
+												if type(list[i-4]) == "table" then
+													local counter = 5
+													while type(list[i-counter]) == "table" do
+														counter = counter + 1
+													end
+													local tStage = list[i] - list[i-1][1]
+													local t = list[i] - list[i-counter]
+													str = format("%s, TooManyStages/%.1f/%.1f", str, tStage/1000, t/1000)
+												else
+													local tStage = list[i] - list[i-1][1]
+													local tStagePrevious = list[i] - list[i-2][1]
+													local tStagePreviousMore = list[i] - list[i-3][1]
+													local t = list[i] - list[i-4]
+													str = format("%s, %.1f/%.1f/%.1f/%.1f", str, tStage/1000, tStagePrevious/1000, tStagePreviousMore/1000, t/1000)
+												end
+											else
+												local tStage = list[i] - list[i-1][1]
+												local tStagePrevious = list[i] - list[i-2][1]
+												local t = list[i] - list[i-3]
+												str = format("%s, %.1f/%.1f/%.1f", str, tStage/1000, tStagePrevious/1000, t/1000)
+											end
+										else
+											local tStage = list[i] - list[i-1][1]
+											local t = list[i] - list[i-2]
+											str = format("%s, %.1f/%.1f", str, tStage/1000, t/1000)
+										end
+									else
+										local t = list[i] - list[i-1]
+										str = format("%s, %.1f", str, t/1000)
+									end
+								end
+							end
+						end
+						currentLog.TIMERS.SPELL_SUMMON[#currentLog.TIMERS.SPELL_SUMMON+1] = str
+					end
+				end
+				table.sort(currentLog.TIMERS.SPELL_SUMMON)
 			end
 			if compareAuraApplied then
 				currentLog.TIMERS.SPELL_AURA_APPLIED = {}
@@ -2319,6 +2445,77 @@ function Transcriptor:StopLog(silent)
 				end
 				table.sort(currentLog.TIMERS.EMOTES)
 			end
+			if compareYells then
+				currentLog.TIMERS.YELLS = {}
+				for id,tbl in next, compareYells do
+					for npcName, list in next, tbl do
+						local msgID = id and GetSpellInfo(id) or "?" -- WotLK emotes generally don't have a spellID, parsing msg as well
+						local n = format("%s-%s-npc:%s", msgID, id, npcName)
+						local str
+						for i = 2, #list do
+							if not str then
+								if type(list[1]) == "table" then
+									local sincePull = list[i] - list[1][1]
+									local sincePreviousEvent = list[i] - list[1][2]
+									local previousEventName = list[1][3]
+									str = format("%s = pull:%.1f/%s/%.1f", n, sincePull/1000, previousEventName, sincePreviousEvent/1000)
+								else
+									local sincePull = list[i] - list[1]
+									str = format("%s = pull:%.1f", n, sincePull/1000)
+								end
+							else
+								if type(list[i]) == "table" then
+									if type(list[i-1]) == "number" then
+										local t = list[i][1]-list[i-1]
+										str = format("%s, %s/%.1f", str, list[i][2], t/1000)
+									elseif type(list[i-1]) == "table" then
+										local t = list[i][1]-list[i-1][1]
+										str = format("%s, %s/%.1f", str, list[i][2], t/1000)
+									else
+										str = format("%s, %s", str, list[i][2])
+									end
+								else
+									if type(list[i-1]) == "table" then
+										if type(list[i-2]) == "table" then
+											if type(list[i-3]) == "table" then
+												if type(list[i-4]) == "table" then
+													local counter = 5
+													while type(list[i-counter]) == "table" do
+														counter = counter + 1
+													end
+													local tStage = list[i] - list[i-1][1]
+													local t = list[i] - list[i-counter]
+													str = format("%s, TooManyStages/%.1f/%.1f", str, tStage/1000, t/1000)
+												else
+													local tStage = list[i] - list[i-1][1]
+													local tStagePrevious = list[i] - list[i-2][1]
+													local tStagePreviousMore = list[i] - list[i-3][1]
+													local t = list[i] - list[i-4]
+													str = format("%s, %.1f/%.1f/%.1f/%.1f", str, tStage/1000, tStagePrevious/1000, tStagePreviousMore/1000, t/1000)
+												end
+											else
+												local tStage = list[i] - list[i-1][1]
+												local tStagePrevious = list[i] - list[i-2][1]
+												local t = list[i] - list[i-3]
+												str = format("%s, %.1f/%.1f/%.1f", str, tStage/1000, tStagePrevious/1000, t/1000)
+											end
+										else
+											local tStage = list[i] - list[i-1][1]
+											local t = list[i] - list[i-2]
+											str = format("%s, %.1f/%.1f", str, tStage/1000, t/1000)
+										end
+									else
+										local t = list[i] - list[i-1]
+										str = format("%s, %.1f", str, t/1000)
+									end
+								end
+							end
+						end
+						currentLog.TIMERS.YELLS[#currentLog.TIMERS.YELLS+1] = str
+					end
+				end
+				table.sort(currentLog.TIMERS.YELLS)
+			end
 		end
 		if collectPlayerAuras then
 			if not currentLog.TIMERS then currentLog.TIMERS = {} end
@@ -2350,8 +2547,10 @@ function Transcriptor:StopLog(silent)
 		compareSuccess = nil
 		compareUnitSuccess = nil
 		compareEmotes = nil
+		compareYells = nil
 		compareStart = nil
 		compareUnitStart = nil
+		compareSummon = nil
 		compareAuraApplied = nil
 		compareStartTime = nil
 		collectPlayerAuras = nil
